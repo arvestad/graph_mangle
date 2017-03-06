@@ -1,0 +1,8 @@
+{
+  "graph_file": "test2.m4",
+  "components": [
+    ["fp.3.Luci_01A01.ctg.ctg7180000038386", "fp.3.Luci_02C06.ctg.ctg7180000060335", "fp.3.Luci_02C06.ctg.ctg7180000085546", "fp.3.Luci_02C06.ctg.ctg7180000085693", "fp.3.Luci_02C06.ctg.ctg7180000087068"],
+    ["fp.3.Luci_99A50.ctg.ctg7180002149103", "fp.3.Luci_99A50.ctg.jtg7180002111759f_7180002111760f"],
+    ["fp.3.Luci_99A50.ctg.ctg7180002149841", "fp.3.Luci_99A50.ctg.ctg7180002149145"]
+  ]
+}
