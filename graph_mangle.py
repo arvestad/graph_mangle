@@ -151,7 +151,7 @@ class Graph():
                 yield c
 
 
-    def output_component_dot(self, g, filename, c):
+    def output_component_dot(self, g, names, filename, c):
         '''
         Write component c to filename in dot format.
         '''
@@ -160,7 +160,9 @@ class Graph():
             for node in c:
                 for a in g.adjacencies(node):
                     if node < a:
-                        oh.write("  " + str(node) + " -- " + str(a) + ";\n")
+                        node_name = names.get_name(node)
+                        a_name = names.get_name(a)
+                        oh.write("  " + str(node) + " -- " + str(a) + "; // " + node_name + ", " + a_name + "\n")
             oh.write("}\n")
 
 
@@ -172,24 +174,32 @@ def read_graph(f, quiet):
     '''
     names = VertexNames()
     g = Graph()
-    n_dropped = 0
+    ignore_vertices = dict()             # Store ids of contigs contained within other contigs
+    candidate_edges = []                 # Edges that we might want to have. Will have to check the ignore_vertices before committing.
 
     with open(f, 'r') as infile:
         for l in infile:
             a, b, n_kmers, ident, qstrand, qstart, qend, qlen, tstrand, tstart, tend, tlen = l.split()
             id_a = names.get_id(a)
             id_b = names.get_id(b)
+            
             # Check if sequences are containd. Do not want contigs that subsets of other contigs.
             # Allow for 10 mismatches at ends
             if int(qend) - int(qstart) < int(qlen) - 10 and int(tend) - int(tstart) < int(tlen) - 10:
-                g.add_edge(id_a, id_b)
+                candidate_edges.append((id_a, id_b))
             else:
-                n_dropped += 1
-                if not quiet:
-                    sys.stderr.write("Dropped overlap between " + a + " and " + b + " because of containment.\n")
-
+                # if not quiet:
+                #     sys.stderr.write("Dropped overlap between " + a + " and " + b + " because of containment.\n")
+                if int(qend) - int(qstart) < int(qlen) - 10: # Want to ignore id_a
+                    ignore_vertices[id_a] = True
+                else:           # Ignore id_b instead
+                    ignore_vertices[id_b] = True
+                    
+        for (id_a, id_b) in candidate_edges:
+            g.add_edge(id_a, id_b)
+            
         if g.n_vertices() > 0:
-            return g, names, n_dropped
+            return g, names, len(ignore_vertices)
         else:
             raise IOError('No vertices in input graph')
 
@@ -266,7 +276,7 @@ def main():
         sys.stderr.write('Reading graph\n')
     g, names, n_dropped = read_graph(args.graph_file, args.quiet)
     if not args.quiet:
-        sys.stderr.write('Dropped ' + str(n_dropped) + ' edges (should be contained contigs)\n')
+        sys.stderr.write('Ignored ' + str(n_dropped) + ' contained contigs\n')
 
     if args.maxdegree:
         if not args.quiet:
@@ -290,7 +300,7 @@ def main():
         else:
             cl = g.connected_components() 
 
-        cl = filter_components_by_size(cl, args.mincomponentsize, args.maxcomponentsize)
+        cl = list(filter_components_by_size(cl, args.mincomponentsize, args.maxcomponentsize))
 
         if args.getcomponents:
             with open(args.getcomponents, "w") as oh:
@@ -304,7 +314,7 @@ def main():
             for i in range(args.randomsubgraphs):
                 r = random.randint(0, len(cl)-1)
                 filename='component_r' + str(i) + '.dot'
-                g.output_component_dot(g, filename, cl[r])
+                g.output_component_dot(g, names, filename, cl[r])
             
         if args.simplestats:
             print("n vertices:   ", g.n_vertices())
