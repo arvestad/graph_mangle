@@ -166,7 +166,7 @@ class Graph():
 
 
 
-def read_graph(f):
+def read_graph(f, quiet):
     '''
     Reads a graph in "M4" format, used by dfp_overlap.
     '''
@@ -175,10 +175,15 @@ def read_graph(f):
 
     with open(f, 'r') as infile:
         for l in infile:
-            a, b, rest = l.split(maxsplit=2)
+            a, b, n_kmers, ident, qstrand, qstart, qend, qlen, tstrand, tstart, tend, tlen = l.split()
             id_a = names.get_id(a)
             id_b = names.get_id(b)
-            g.add_edge(id_a, id_b)
+            # Check if sequences are containd. Do not want contigs that subsets of other contigs.
+            # Allow for 10 mismatches at ends
+            if int(qend) - int(qstart) < int(qlen) - 10 and int(tend) - int(tstart) < int(tlen) - 10:
+                g.add_edge(id_a, id_b)
+            elif not quiet:
+                sys.stderr.write("Dropped overlap between " + a + " and " + b + " because of containment.\n")
 
         if g.n_vertices() > 0:
             return g, names
@@ -229,6 +234,16 @@ def output_degree_distribution(g, oh):
         oh.write("{:d}\t{:d}\n".format(v, d))
 
 
+def filter_components_by_size(cl, minzise, maxsize):
+    '''
+    If minzise/maxsize set, remove components outside the range.
+    '''
+    if minzise:
+        cl = list(filter(lambda c: len(c) >= minzise, cl))
+    if maxsize:
+        cl = list(filter(lambda c: len(c) <= maxsize, cl))
+    return cl
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("graph_file", help="Input graph in M4 format. See olp_overlap output.")
@@ -236,14 +251,21 @@ def main():
     parser.add_argument("-G", "--degreelimit", type=int, help="Limit components to given degree. High degree vertices can be 'endpoints' of a component, but will not be further traversed.")
     parser.add_argument("-r", "--randomsubgraphs", type=int, help="Output <int> random subgraphs. Restricted to components of size > 5.")
     parser.add_argument("-m", "--maxdegree", type=int, help="Specify a maximum allowed degree on a vertex. Vertices with higher degree is removed from the graph.")
+    parser.add_argument("-cmin", "--mincomponentsize", type=int, help="Forget about components smaller than this.")
+    parser.add_argument("-cmax", "--maxcomponentsize", type=int, help="Forget about components larger than this.")
     parser.add_argument("-d", "--degreedistribution", type=str, help="Compute and write the degree distribution (histogram) of the graph to the named output file.")
     parser.add_argument("-s", "--simplestats", action="store_true", help="Just output number of vertices and components.")
+    parser.add_argument("-q", "--quiet", action="store_true", help="Do not print progress information.")
     
     args=parser.parse_args()
     
-    g, names = read_graph(args.graph_file)
+    if not args.quiet:
+        sys.stderr.write('Reading graph\n')
+    g, names = read_graph(args.graph_file, args.quiet)
 
     if args.maxdegree:
+        if not args.quiet:
+            sys.stderr.write('Removing high degree nodes\n')
         n = g.remove_high_degree_nodes(args.maxdegree)
         sys.stderr.write("Removed " + str(n) + " high degree nodes\n")
         n = g.remove_singletons()
@@ -255,11 +277,15 @@ def main():
             output_degree_distribution(g, oh)
 
     if args.getcomponents or args.randomsubgraphs or args.simplestats:
+        if not args.quiet:
+            sys.stderr.write('Collecting components\n')
         # Get a list of connected components
         if args.degreelimit:
             cl = g.degree_limited_connected_components(args.degreelimit)
         else:
             cl = g.connected_components() 
+
+        cl = filter_components_by_size(cl, args.mincomponentsize, args.maxcomponentsize)
 
         if args.getcomponents:
             with open(args.getcomponents, "w") as oh:
@@ -268,13 +294,12 @@ def main():
         if args.randomsubgraphs:
             if not args.randomsubgraphs > 0:
                 raise Exception('Must ask for a positive number of subgraphs!')
-            good_components = list(filter(lambda c: len(c) > 3, cl))
-            if len(good_components) == 0:
-                raise Exception('No components larger than 3 available!')
+            if len(cl) == 0:
+                raise Exception('No components available!')
             for i in range(args.randomsubgraphs):
-                r = random.randint(0, len(good_components)-1)
+                r = random.randint(0, len(cl)-1)
                 filename='component_r' + str(i) + '.dot'
-                g.output_component_dot(g, filename, good_components[r])
+                g.output_component_dot(g, filename, cl[r])
             
         if args.simplestats:
             print("n vertices:   ", g.n_vertices())
