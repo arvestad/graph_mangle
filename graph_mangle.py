@@ -172,6 +172,7 @@ def read_graph(f, quiet):
     '''
     names = VertexNames()
     g = Graph()
+    n_dropped = 0
 
     with open(f, 'r') as infile:
         for l in infile:
@@ -182,11 +183,13 @@ def read_graph(f, quiet):
             # Allow for 10 mismatches at ends
             if int(qend) - int(qstart) < int(qlen) - 10 and int(tend) - int(tstart) < int(tlen) - 10:
                 g.add_edge(id_a, id_b)
-            elif not quiet:
-                sys.stderr.write("Dropped overlap between " + a + " and " + b + " because of containment.\n")
+            else:
+                n_dropped += 1
+                if not quiet:
+                    sys.stderr.write("Dropped overlap between " + a + " and " + b + " because of containment.\n")
 
         if g.n_vertices() > 0:
-            return g, names
+            return g, names, n_dropped
         else:
             raise IOError('No vertices in input graph')
 
@@ -261,7 +264,9 @@ def main():
     
     if not args.quiet:
         sys.stderr.write('Reading graph\n')
-    g, names = read_graph(args.graph_file, args.quiet)
+    g, names, n_dropped = read_graph(args.graph_file, args.quiet)
+    if not args.quiet:
+        sys.stderr.write('Dropped ' + str(n_dropped) + ' edges (should be contained contigs)\n')
 
     if args.maxdegree:
         if not args.quiet:
