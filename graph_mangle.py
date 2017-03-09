@@ -221,10 +221,22 @@ def output_components(cl, names, fname, oh):
         s_vertices = translate_component(sorted_vertex_list, names) # List of vertex names
         md5 = hashlib.md5(s_vertices.encode('utf-8')).hexdigest()
         
-        oh.write('    { "size"  : ' + str(size) + '\n      "md5"   : ' + md5 + '\n      "nodes" : ' + str(s_vertices) + '\n    }')
+        oh.write('    { "size"  : ' + str(size) + ',\n      "md5"   : "' + md5 + '",\n      "nodes" : ' + str(s_vertices) + '\n    }')
         first = False
     oh.write('\n  ]\n}\n')
     
+def output_components_lst(cl, names, prefix):
+    '''
+    Input: component list, vertex names, input filename, output file
+    Output: a simple list of contig ids, one file per component.
+    '''
+    i = 0
+    for c in cl:
+        with open(prefix + str(i) + ".lst", "w") as oh:
+            for id in c:
+                name = names.get_name(id)
+                oh.write(name + "\n")
+   
 
 def translate_component(c, names):
     l = []
@@ -262,6 +274,7 @@ def main():
     parser.add_argument("graph_file", help="Input graph in M4 format. See olp_overlap output.")
     parser.add_argument("-g", "--getcomponents", type=str, help="Output components to named file.")
     parser.add_argument("-G", "--degreelimit", type=int, help="Limit components to given degree. High degree vertices can be 'endpoints' of a component, but will not be further traversed.")
+    parser.add_argument("-l", "--lst", action="store_true", help="Like option -g, but output in one component per file, one contig accession per line.")
     parser.add_argument("-r", "--randomsubgraphs", type=int, help="Output <int> random subgraphs. Restricted to components of size > 5.")
     parser.add_argument("-m", "--maxdegree", type=int, help="Specify a maximum allowed degree on a vertex. Vertices with higher degree is removed from the graph.")
     parser.add_argument("-cmin", "--mincomponentsize", type=int, help="Forget about components smaller than this.")
@@ -291,7 +304,7 @@ def main():
         with open(args.degreedistribution, "w") as oh:
             output_degree_distribution(g, oh)
 
-    if args.getcomponents or args.randomsubgraphs or args.simplestats:
+    if args.getcomponents or args.lst or args.randomsubgraphs or args.simplestats:
         if not args.quiet:
             sys.stderr.write('Collecting components\n')
         # Get a list of connected components
@@ -302,9 +315,13 @@ def main():
 
         cl = list(filter_components_by_size(cl, args.mincomponentsize, args.maxcomponentsize))
 
-        if args.getcomponents:
+        if args.getcomponents:  # JSON format
             with open(args.getcomponents, "w") as oh:
                 output_components(cl, names, args.graph_file, oh)
+
+        if args.lst:          # One component per file and plain single id per line
+            output_components_lst(cl, names, "component_")
+
 
         if args.randomsubgraphs:
             if not args.randomsubgraphs > 0:
