@@ -179,24 +179,28 @@ def read_graph(f, quiet):
 
     with open(f, 'r') as infile:
         for l in infile:
-            a, b, n_kmers, ident, qstrand, qstart, qend, qlen, tstrand, tstart, tend, tlen = l.split()
-            id_a = names.get_id(a)
-            id_b = names.get_id(b)
+            # The m4 file is discussed in terms of a query (q) and target (t)
+            q, t, n_kmers, ident, qstrand, qstart, qend, qlen, tstrand, tstart, tend, tlen = l.split()
+            id_q = names.get_id(q)
+            id_t = names.get_id(t)
             
             # Check if sequences are containd. Do not want contigs that subsets of other contigs.
             # Allow for 10 mismatches at ends
             if int(qend) - int(qstart) < int(qlen) - 10 and int(tend) - int(tstart) < int(tlen) - 10:
-                candidate_edges.append((id_a, id_b))
+                candidate_edges.append((id_q, id_t))
             else:
-                # if not quiet:
-                #     sys.stderr.write("Dropped overlap between " + a + " and " + b + " because of containment.\n")
-                if int(qend) - int(qstart) < int(qlen) - 10: # Want to ignore id_a
-                    ignore_vertices[id_a] = True
-                else:           # Ignore id_b instead
-                    ignore_vertices[id_b] = True
+                if int(qend) - int(qstart) < int(qlen) - 10: # Want to ignore id_t
+                    ignore_vertices[id_t] = True
+#                    if not quiet:
+#                        sys.stderr.write("Dropping " + t + " because of contained in " + q + ".\n")
+                else:           # Ignore id_q instead
+                    ignore_vertices[id_q] = True
+#                    if not quiet:
+#                        sys.stderr.write("Dropping " + q + " because of contained in " + t + ".\n")
                     
-        for (id_a, id_b) in candidate_edges:
-            g.add_edge(id_a, id_b)
+        for (id_q, id_t) in candidate_edges:
+            if id_q not in ignore_vertices and id_t not in ignore_vertices:
+                g.add_edge(id_q, id_t)
             
         if g.n_vertices() > 0:
             return g, names, len(ignore_vertices)
