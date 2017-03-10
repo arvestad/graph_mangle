@@ -29,19 +29,38 @@ class VertexNames():
 class Graph():
     def __init__(self):
         self._adjacencies = dict()
+        self._edge_attributes = dict() # Stores any attribute, like self._edge_attributes[(a,b)] = value, with a and b ordered
 
     def __repr__(self):
         return '<Graph ' + str(self._adjacencies) + '>'
 
-    def add_edge(self, a, b):
-        self.add_directed_edge(a, b)
-        self.add_directed_edge(b, a)
+    def add_edge_attribute(self, a, b, attr):
+        if a<b:
+            self._edge_attributes[(a,b)] = attr
+        else:
+            self._edge_attributes[(b,a)] = attr
 
-    def add_directed_edge(self, a, b):
+    def get_edge_attribute(self, a, b):
+        key = (a,b)
+        if b<a:
+            key = (b,a)
+        if key in self._edge_attributes:
+            return self._edge_attributes[key]
+        else:
+            return None
+
+    def add_edge(self, a, b, attr=None):
+        self.add_directed_edge(a, b, attr)
+        self.add_directed_edge(b, a, attr)
+
+    def add_directed_edge(self, a, b, attr=None):
         if a in self._adjacencies:
             self._adjacencies[a].add(b)
         else:
             self._adjacencies[a] = set([b])
+        if attr:
+            self.add_edge_attribute(a, b, attr)
+        
 
     def vertices(self):
         return self._adjacencies.keys()
@@ -162,7 +181,11 @@ class Graph():
                     if node < a:
                         node_name = names.get_name(node)
                         a_name = names.get_name(a)
-                        oh.write("  " + str(node) + " -- " + str(a) + "; // " + node_name + ", " + a_name + "\n")
+                        attr = self.get_edge_attribute(node, a)
+                        oh.write("  " + str(node) + " -- " + str(a))
+                        if attr:
+                            oh.write(" [label=" + attr + "]")
+                        oh.write("; // " + node_name + ", " + a_name + "\n")
             oh.write("}\n")
 
 
@@ -183,11 +206,13 @@ def read_graph(f, quiet):
             q, t, n_kmers, ident, qstrand, qstart, qend, qlen, tstrand, tstart, tend, tlen = l.split()
             id_q = names.get_id(q)
             id_t = names.get_id(t)
-            
+
+            id_val = round(float(ident), 2)
+
             # Check if sequences are containd. Do not want contigs that subsets of other contigs.
             # Allow for 10 mismatches at ends
             if int(qend) - int(qstart) < int(qlen) - 10 and int(tend) - int(tstart) < int(tlen) - 10:
-                candidate_edges.append((id_q, id_t))
+                candidate_edges.append((id_q, id_t, id_val))
             else:
                 if int(qend) - int(qstart) < int(qlen) - 10: # Want to ignore id_t
                     ignore_vertices[id_t] = True
@@ -198,14 +223,14 @@ def read_graph(f, quiet):
 #                    if not quiet:
 #                        sys.stderr.write("Dropping " + q + " because of contained in " + t + ".\n")
                     
-        for (id_q, id_t) in candidate_edges:
+        for (id_q, id_t, ident) in candidate_edges:
             if id_q not in ignore_vertices and id_t not in ignore_vertices:
-                g.add_edge(id_q, id_t)
+                g.add_edge(id_q, id_t, str(ident))
             
         if g.n_vertices() > 0:
             return g, names, len(ignore_vertices)
         else:
-            raise IOError('No vertices in input graph')
+            raise IOError('No vertices in input graph. ' + str(len(ignore_vertices)) + " vertices were ignored because its contig was contained in another contig.")
 
 
 def output_components(cl, names, fname, oh):
